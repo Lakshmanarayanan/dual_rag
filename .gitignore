@@ -1,0 +1,19 @@
+# Python environment
+venv/
+__pycache__/
+*.py[cod]
+
+# Environment variables & secrets (CRITICAL)
+.env
+*.env
+
+# FAISS Vector Index local storage
+faiss_pdf_index/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# IDE settings
+.vscode/
+.idea/

@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dual_rag_backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      # Optional: Persist FAISS vector index data across container restarts
+      - faiss_data:/app/faiss_pdf_index
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: dual_rag_frontend
+    ports:
+      - "8501:8501"
+    environment:
+      # Directs Streamlit to call the internal Docker backend container
+      - BACKEND_URL=http://backend:8000/api/chat
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  faiss_data:
