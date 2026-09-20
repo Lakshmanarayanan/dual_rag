@@ -103,17 +103,29 @@ class ChatRequest(BaseModel):
     prompt: str
 
 
+
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
-    if not state["vector_db"] or not state["kg"]:
+    # Auto-recover FAISS index from disk if container reloaded
+    if state.get("vector_db") is None and os.path.exists(FAISS_INDEX_PATH):
+        try:
+            embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+            state["vector_db"] = FAISS.load_local(
+                FAISS_INDEX_PATH, embeddings, allow_dangerous_deserialization=True
+            )
+        except Exception as e:
+            print(f"Failed to load FAISS index: {e}")
+
+    # Guard check for missing index/graph state
+    if not state.get("vector_db") or not state.get("kg"):
         return {
-            "answer": "⚠️ No PDF document has been uploaded yet. Please upload a PDF using the sidebar first.",
+            "answer": "⚠️ No active document session found. Please re-upload your PDF using the sidebar first.",
             "guardrail_triggered": True,
         }
 
     raw_input = request.prompt
 
-    # Input Guardrail
+    # Input Guardrail Check
     is_valid, validated_input_or_err = validate_user_input(
         raw_input, max_length=500
     )
@@ -123,20 +135,21 @@ async def chat_endpoint(request: ChatRequest):
             "guardrail_triggered": True,
         }
 
-    user_query = validated_input_or_err
-    client = state["client"]
-    vector_db = state["vector_db"]
-    kg = state["kg"]
+    try:
+        user_query = validated_input_or_err
+        client = state["client"]
+        vector_db = state["vector_db"]
+        kg = state["kg"]
 
-    # Retrieve Context
-    vector_context, graph_context = retrieve_hybrid_context(
-        user_query, vector_db, kg
-    )
+        # Retrieve Context
+        vector_context, graph_context = retrieve_hybrid_context(
+            user_query, vector_db, kg
+        )
 
-    system_prompt = """You are a strict, helpful assistant answering questions based ONLY on the provided context.
+        system_prompt = """You are a strict, helpful assistant answering questions based ONLY on the provided context.
 If the answer cannot be determined from the context, state "I do not have enough information in the provided document." """
 
-    prompt = f"""Question: {user_query}
+        prompt = f"""Question: {user_query}
 
 --- FAISS VECTOR CONTEXT ---
 {vector_context}
@@ -146,16 +159,82 @@ If the answer cannot be determined from the context, state "I do not have enough
 
 Answer:"""
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.0,
-    )
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.0,
+        )
 
-    raw_answer = response.choices[0].message.content.strip()
-    safe_answer = validate_llm_output(raw_answer)
+        raw_answer = response.choices[0].message.content.strip()
+        safe_answer = validate_llm_output(raw_answer)
 
-    return {"answer": safe_answer, "guardrail_triggered": False}
+        return {"answer": safe_answer, "guardrail_triggered": False}
+
+    except Exception as e:
+        print(f"Error during execution: {str(e)}")
+        return {
+            "answer": f"⚠️ Processing error: {str(e)}",
+            "guardrail_triggered": True,
+        }
+
+
+    
+#@app.post("/api/chat")
+# async def chat_endpoint(request: ChatRequest):
+#     if not state["vector_db"] or not state["kg"]:
+#         return {
+#             "answer": "⚠️ No PDF document has been uploaded yet. Please upload a PDF using the sidebar first.",
+#             "guardrail_triggered": True,
+#         }
+
+#     raw_input = request.prompt
+
+#     # Input Guardrail
+#     is_valid, validated_input_or_err = validate_user_input(
+#         raw_input, max_length=500
+#     )
+#     if not is_valid:
+#         return {
+#             "answer": f"🚫 [Input Guardrail Triggered]: {validated_input_or_err}",
+#             "guardrail_triggered": True,
+#         }
+
+#     user_query = validated_input_or_err
+#     client = state["client"]
+#     vector_db = state["vector_db"]
+#     kg = state["kg"]
+
+#     # Retrieve Context
+#     vector_context, graph_context = retrieve_hybrid_context(
+#         user_query, vector_db, kg
+#     )
+
+#     system_prompt = """You are a strict, helpful assistant answering questions based ONLY on the provided context.
+# If the answer cannot be determined from the context, state "I do not have enough information in the provided document." """
+
+#     prompt = f"""Question: {user_query}
+
+# --- FAISS VECTOR CONTEXT ---
+# {vector_context}
+
+# --- KNOWLEDGE GRAPH CONTEXT ---
+# {graph_context}
+
+# Answer:"""
+
+#     response = client.chat.completions.create(
+#         model="gpt-4o-mini",
+#         messages=[
+#             {"role": "system", "content": system_prompt},
+#             {"role": "user", "content": prompt},
+#         ],
+#         temperature=0.0,
+#     )
+
+#     raw_answer = response.choices[0].message.content.strip()
+#     safe_answer = validate_llm_output(raw_answer)
+
+#     return {"answer": safe_answer, "guardrail_triggered": False}
