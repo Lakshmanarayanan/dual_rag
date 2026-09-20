@@ -24,7 +24,7 @@ services:
       - "8501:8501"
     environment:
       # Directs Streamlit to call the internal Docker backend container
-      - BACKEND_URL=http://backend:8000/api/chat
+      - BACKEND_URL=http://backend:8000
     depends_on:
       - backend
     restart: unless-stopped

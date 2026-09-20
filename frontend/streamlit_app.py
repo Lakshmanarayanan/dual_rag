@@ -2,10 +2,13 @@ import os
 import requests
 import streamlit as st
 
-# Server URLs
-BASE_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
-CHAT_URL = f"{BASE_URL}/api/chat"
+# Base backend URL passed from docker-compose.yml
+# Defaults to http://backend:8000 inside Docker, or http://localhost:8000 locally
+BASE_URL = os.getenv("BACKEND_URL", "http://backend:8000").rstrip("/")
+
+# Ensure endpoints lead directly to FastAPI routes
 UPLOAD_URL = f"{BASE_URL}/api/upload"
+CHAT_URL = f"{BASE_URL}/api/chat"
 
 st.set_page_config(
     page_title="GraphRAG Document Assistant",
