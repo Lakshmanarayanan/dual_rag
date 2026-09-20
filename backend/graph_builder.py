@@ -2,9 +2,6 @@ import json
 import networkx as nx
 
 def extract_triples_from_chunk(chunk_text: str, client) -> list:
-    """
-    Extracts knowledge graph entities and relationships (subject, predicate, object) from a text chunk.
-    """
     system_prompt = """You are a knowledge graph builder. Extract key entity relationships from the provided text.
 Return strictly valid JSON in the following format:
 {
@@ -16,7 +13,7 @@ Return strictly valid JSON in the following format:
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            response_format={"type": "json_object"},  # 👈 Enforces raw JSON output
+            response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Text:\n{chunk_text}"}
@@ -25,29 +22,21 @@ Return strictly valid JSON in the following format:
         )
         
         raw_content = response.choices[0].message.content.strip()
-        
-        # Parse JSON output safely
         data = json.loads(raw_content)
         return data.get("triples", [])
 
-    except json.JSONDecodeError:
-        # Fallback if markdown fences are included
-        cleaned_content = raw_content.replace("```json", "").replace("```", "").strip()
-        try:
-            data = json.loads(cleaned_content)
-            return data.get("triples", [])
-        except Exception:
-            return []
     except Exception as e:
-        print(f"Error extracting triples: {e}")
+        print(f"Triple extraction error: {e}")
         return []
 
 
 def build_networkx_graph(chunks, client, max_chunks=5):
     """
-    Constructs a NetworkX MultiDiGraph from document chunks.
+    Constructs a NetworkX DiGraph from document chunks.
     """
-    G = nx.Graph()
+    # ❌ OLD: G = nx.Graph()
+    # ✅ FIX: Use DiGraph to support directional traversal methods like successors()
+    G = nx.DiGraph()
     
     print("🕸️ Extracting triples and building NetworkX Knowledge Graph...")
     
